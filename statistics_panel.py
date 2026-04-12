@@ -28,7 +28,6 @@ class StatisticsPanel(QDialog):
         self.setWindowTitle("检���数据统计")
         self.setGeometry(100, 100, 1200, 700)
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
-        self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         
         self.figure = None
         self.canvas = None
@@ -269,10 +268,6 @@ class StatisticsPanel(QDialog):
                 print(f"[Export] 导出失败: {e}")
     
     def closeEvent(self, event):
-        """关闭时清理资源"""
+        """关闭窗口（保留资源以供复用）"""
         print("[StatisticsPanel] 窗口关闭")
-        try:
-            plt.close(self.figure)
-        except:
-            pass
         super().closeEvent(event)
