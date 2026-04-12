@@ -902,13 +902,12 @@ class Ui_MainWindow(QtWidgets.QMainWindow):
     def show_statistics(self):
         """显示数据统计窗口"""
         try:
-            if self.statistics_window is None or not self.statistics_window.isVisible():
+            if self.statistics_window is None:
                 self.statistics_window = StatisticsPanel(self.post_processor, self)
-                self.statistics_window.show()
-            else:
-                self.statistics_window.update_charts()
-                self.statistics_window.raise_()
-                self.statistics_window.activateWindow()
+            self.statistics_window.update_charts()
+            self.statistics_window.show()
+            self.statistics_window.raise_()
+            self.statistics_window.activateWindow()
         except Exception as e:
             self.logger.exception(f"打开统计窗口失败: {e}")
             QMessageBox.critical(self, "错误", f"打开统计窗口失败: {str(e)}")
