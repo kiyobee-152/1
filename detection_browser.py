@@ -22,7 +22,7 @@ class DetectionBrowser(QDialog):
         self.logger = logger
         
         self.setWindowTitle("检测结果浏览器")
-        self.setGeometry(50, 50, 1400, 700)
+        self.setGeometry(50, 50, 1600, 700)
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         
         self.init_ui()
@@ -34,6 +34,16 @@ class DetectionBrowser(QDialog):
         
         # 搜索和筛选栏
         filter_layout = QHBoxLayout()
+        
+        # ✅ 添加"镜头"筛选器
+        feed_label = QLabel("镜头:")
+        self.feed_combo = QComboBox()
+        self.feed_combo.addItem("所有镜头")
+        for i in range(8):
+            self.feed_combo.addItem(f"画面{i + 1}")
+        self.feed_combo.currentIndexChanged.connect(self.filter_data)
+        filter_layout.addWidget(feed_label)
+        filter_layout.addWidget(self.feed_combo)
         
         class_label = QLabel("类别:")
         self.class_combo = QComboBox()
@@ -68,11 +78,11 @@ class DetectionBrowser(QDialog):
         filter_layout.addWidget(refresh_btn)
         filter_layout.addWidget(export_btn)
         
-        # 数据表格
+        # ✅ 数据表格 - 添加"镜头"列
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "时间戳", "帧ID", "类别", "置信度", "位置", "操作"
+            "时间戳", "镜头", "帧ID", "类别", "置信度", "位置", "操作"
         ])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -117,12 +127,20 @@ class DetectionBrowser(QDialog):
     def filter_data(self):
         """根据筛选条件过滤数据"""
         try:
+            # ✅ 获取镜头筛选条件
+            selected_feed_text = self.feed_combo.currentText()
+            selected_feed = -1 if selected_feed_text == "所有镜头" else int(selected_feed_text.replace("画面", "")) - 1
+            
             selected_class = self.class_combo.currentText()
             min_confidence = self.conf_spin.value() / 100.0
             search_frame_id = self.search_input.text().strip()
             
             filtered = []
             for det in self.all_detections:
+                # ✅ 按镜头筛选
+                if selected_feed != -1 and det.feed_id != selected_feed:
+                    continue
+                
                 if selected_class != "所有类别" and det.class_name != selected_class:
                     continue
                 
@@ -148,19 +166,51 @@ class DetectionBrowser(QDialog):
         """更新表格显示"""
         self.table.setRowCount(len(detections))
         
+        # ✅ 定义强调颜色
+        alert_brush = QtGui.QBrush(QtGui.QColor(255, 200, 200))  # 浅红色背景
+        alert_font = QtGui.QFont()
+        alert_font.setBold(True)  # 加粗字体
+        
+        # 需要强调的类别
+        alert_classes = {'Other_garbage', 'bolt'}
+        
         for row, det in enumerate(detections):
-            self.table.setItem(row, 0, QTableWidgetItem(det.timestamp))
+            timestamp_item = QTableWidgetItem(det.timestamp)
+            self.table.setItem(row, 0, timestamp_item)
+            
+            # ✅ 显示镜头ID（格式化为"画面1"-"画面8"）
+            feed_name = f"画面{det.feed_id + 1}"
+            feed_item = QTableWidgetItem(feed_name)
+            self.table.setItem(row, 1, feed_item)
+            
             frame_id = str(det.frame_id) if det.frame_id is not None else "-"
-            self.table.setItem(row, 1, QTableWidgetItem(frame_id))
-            self.table.setItem(row, 2, QTableWidgetItem(det.class_name))
+            frame_item = QTableWidgetItem(frame_id)
+            self.table.setItem(row, 2, frame_item)
+            
+            class_item = QTableWidgetItem(det.class_name)
+            self.table.setItem(row, 3, class_item)
+            
             conf_text = f"{det.confidence:.2f}"
-            self.table.setItem(row, 3, QTableWidgetItem(conf_text))
+            conf_item = QTableWidgetItem(conf_text)
+            self.table.setItem(row, 4, conf_item)
+            
             bbox_text = f"({det.bbox[0]},{det.bbox[1]},{det.bbox[2]},{det.bbox[3]})"
-            self.table.setItem(row, 4, QTableWidgetItem(bbox_text))
+            bbox_item = QTableWidgetItem(bbox_text)
+            self.table.setItem(row, 5, bbox_item)
             
             save_btn = QPushButton("保存")
             save_btn.clicked.connect(lambda checked, r=row: self.save_detection(r))
-            self.table.setCellWidget(row, 5, save_btn)
+            self.table.setCellWidget(row, 6, save_btn)
+            
+            # ✅ 如果是 'Other_garbage' 或 'bolt'，强调整行
+            if det.class_name in alert_classes:
+                for col in range(7):
+                    cell = self.table.item(row, col)
+                    if cell:
+                        cell.setBackground(alert_brush)
+                        cell.setFont(alert_font)
+                        # 设置文字颜色为深红
+                        cell.setForeground(QtGui.QColor(200, 0, 0))
         
         self.table.resizeColumnsToContents()
     
@@ -211,7 +261,8 @@ class DetectionBrowser(QDialog):
             
             for det in self.all_detections:
                 if det.timestamp == timestamp:
-                    save_file = os.path.join(export_dir, f"detection_{det.class_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                    feed_name = f"画面{det.feed_id + 1}"
+                    save_file = os.path.join(export_dir, f"detection_{feed_name}_{det.class_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
                     with open(save_file, 'w', encoding='utf-8') as f:
                         json.dump(det.to_dict(), f, ensure_ascii=False, indent=2)
                     
